@@ -1,0 +1,14 @@
+target/
+*.class
+*.jar
+!**/gradle/wrapper/*.jar
+docker/jmx/jmx_prometheus_javaagent.jar
+.env
+*.log
+logs/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+/tmp/
+state/

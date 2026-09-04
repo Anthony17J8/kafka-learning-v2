@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build and test
+        working-directory: labs
+        run: mvn -B verify
+
+      - name: Validate compose files
+        run: |
+          docker compose -f docker/compose.single.yml config -q
+          docker compose -f docker/compose.cluster.yml config -q
+
+      - name: Shellcheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck -x kl scripts/*.sh scripts/lib/*.sh
+
+      - name: Smoke test CLI
+        run: |
+          ./kl help
+          ./kl check || true

@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+#
+# kl — единая точка входа в учебное окружение.
+#
+#   ./kl help              список команд
+#   ./kl up single         поднять одиночный брокер
+#   ./kl produce async 10000
+#
+# Скрипт можно вызывать из любого каталога: пути считаются от расположения файла.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/common.sh
+source "$SCRIPT_DIR/scripts/lib/common.sh"
+
+load_env
+
+C_HELP_TAG="help"   # см. cmd_help
+JMX_AGENT_VERSION="${JMX_AGENT_VERSION:-1.1.0}"
+JMX_AGENT_PATH="$KL_ROOT/docker/jmx/jmx_prometheus_javaagent.jar"
+
+# ============================ окружения ============================
+
+cmd_up() { #help up <single,cluster,monitoring>|поднять окружение
+  local target=${1:-}
+  require docker
+  case "$target" in
+    single)
+      dc "$SINGLE_COMPOSE" up -d
+      wait_healthy kafka
+      ok "bootstrap: localhost:9092   UI: http://localhost:8080"
+      ;;
+    cluster)
+      cmd_jmx-agent
+      dc "$CLUSTER_COMPOSE" up -d
+      for n in 1 2 3; do wait_healthy "kafka-$n" 180; done
+      ok "bootstrap: localhost:19092,localhost:29092,localhost:39092"
+      ok "UI: http://localhost:8080   Schema Registry: http://localhost:8081"
+      echo
+      echo "Для клиентов на хосте:"
+      echo "  export BOOTSTRAP_SERVERS=localhost:19092,localhost:29092,localhost:39092"
+      ;;
+    monitoring)
+      [[ "$(active_env)" == "cluster" ]] || warn "мониторинг рассчитан на кластер (сеть kafka-learning)"
+      dc "$MONITORING_COMPOSE" up -d
+      ok "Prometheus: http://localhost:9090   Grafana: http://localhost:3000 (admin/admin)"
+      ;;
+    *)
+      die "укажите окружение: single | cluster | monitoring"
+      ;;
+  esac
+}
+
+cmd_down() { #help down [--keep-data]|остановить всё (по умолчанию с удалением данных)
+  local args=(down)
+  [[ "${1:-}" == "--keep-data" ]] || args+=(-v)
+  for f in "$MONITORING_COMPOSE" "$CLUSTER_COMPOSE" "$SINGLE_COMPOSE"; do
+    dc "$f" "${args[@]}" 2>/dev/null || true
+  done
+  ok "окружения остановлены"
+}
+
+cmd_restart() { #help restart <single,cluster>|перезапустить окружение с нуля
+  cmd_down
+  cmd_up "${1:-single}"
+}
+
+cmd_logs() { #help logs [service]|логи (по умолчанию все брокеры)
+  require docker
+  local file
+  file=$([[ "$(active_env)" == "cluster" ]] && echo "$CLUSTER_COMPOSE" || echo "$SINGLE_COMPOSE")
+  if [[ -n "${1:-}" ]]; then
+    dc "$file" logs -f "$1"
+  elif [[ "$(active_env)" == "cluster" ]]; then
+    dc "$file" logs -f kafka-1 kafka-2 kafka-3
+  else
+    dc "$file" logs -f kafka
+  fi
+}
+
+cmd_ps() { #help ps|что сейчас запущено
+  require docker
+  docker ps --filter 'name=kafka' --filter 'name=schema-registry' \
+            --filter 'name=prometheus' --filter 'name=grafana' \
+            --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+  echo
+  info "активное окружение: $(active_env)"
+}
+
+# shellcheck disable=SC2120
+cmd_jmx-agent() { #help jmx-agent|скачать JMX exporter (нужен кластеру)
+  if [[ -f "$JMX_AGENT_PATH" ]]; then
+    return 0
+  fi
+  require curl
+  info "скачиваю JMX exporter $JMX_AGENT_VERSION"
+  curl -fsSL -o "$JMX_AGENT_PATH" \
+    "https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/${JMX_AGENT_VERSION}/jmx_prometheus_javaagent-${JMX_AGENT_VERSION}.jar" \
+    || die "не удалось скачать JMX exporter. Либо скачайте вручную в docker/jmx/, либо уберите KAFKA_OPTS из compose.cluster.yml"
+  ok "JMX exporter на месте"
+}
+
+# ============================ топики ============================
+
+cmd_topics() { #help topics <create,list,describe,purge>|операции с учебными топиками
+  local action=${1:-list}; shift || true
+  case "$action" in
+    create)
+      if [[ "$(active_env)" == "cluster" ]]; then
+        KAFKA_CONTAINER=kafka-1 INTERNAL_BOOTSTRAP=localhost:29092 REPLICATION_FACTOR=3 \
+          "$KL_ROOT/scripts/topics-create.sh"
+      else
+        KAFKA_CONTAINER=kafka INTERNAL_BOOTSTRAP=localhost:19092 REPLICATION_FACTOR=1 \
+          "$KL_ROOT/scripts/topics-create.sh"
+      fi
+      ;;
+    list)     kafka_cli kafka-topics.sh --list ;;
+    describe)
+      if [[ -n "${1:-}" ]]; then
+        kafka_cli kafka-topics.sh --describe --topic "$1"
+      else
+        kafka_cli kafka-topics.sh --describe
+      fi
+      ;;
+    purge)
+      warn "будут удалены все топики labs.*"
+      read -r -p "продолжить? [y/N] " answer
+      [[ "$answer" == "y" ]] || exit 0
+      kafka_cli kafka-topics.sh --delete --topic 'labs\..*'
+      ok "учебные топики удалены"
+      ;;
+    *) die "topics: create | list | describe <топик> | purge" ;;
+  esac
+}
+
+cmd_health() { #help health|состояние кластера через CLI
+  "$KL_ROOT/scripts/cluster-health.sh"
+}
+
+cmd_groups() { #help groups [group]|consumer-группы и их lag
+  if [[ -n "${1:-}" ]]; then
+    kafka_cli kafka-consumer-groups.sh --describe --group "$1"
+  else
+    kafka_cli kafka-consumer-groups.sh --list
+  fi
+}
+
+cmd_chaos() { #help chaos <scenario> [args]|учения по отказам
+  "$KL_ROOT/scripts/chaos.sh" "$@"
+}
+
+# ============================ сборка и лабы ============================
+
+cmd_build() { #help build|собрать все модули labs/
+  require mvn
+  mvn -f "$KL_ROOT/labs/pom.xml" -T 1C clean install -DskipTests
+}
+
+cmd_test() { #help test|прогнать тесты
+  require mvn
+  mvn -f "$KL_ROOT/labs/pom.xml" test
+}
+
+cmd_produce() { #help produce [mode] [count]|отправить события: sync / async / fire-and-forget
+  mvn_run lab03-producer dev.learning.kafka.producer.ProducerModes \
+    "${1:-async}" "${2:-100000}"
+}
+
+cmd_consume() { #help consume|консьюмер с ручным коммитом
+  mvn_run lab04-consumer dev.learning.kafka.consumer.ManualCommitConsumer
+}
+
+cmd_lag() { #help lag [group]|lag группы через Admin API
+  mvn_run lab04-consumer dev.learning.kafka.consumer.LagReporter \
+    "${1:-labs.orders.processor}"
+}
+
+cmd_doctor() { #help doctor|диагностика кластера через Admin API
+  mvn_run lab07-admin dev.learning.kafka.admin.ClusterDoctor
+}
+
+cmd_tx() { #help tx [transactional.id]|транзакционный read-process-write
+  mvn_run lab06-transactions dev.learning.kafka.tx.TransactionalPipeline \
+    "${1:-tx-worker-1}"
+}
+
+cmd_streams() { #help streams|запустить Kafka Streams приложение
+  mvn_run lab12-streams dev.learning.kafka.streams.RevenueApp
+}
+
+cmd_bench() { #help bench [size] [count]|kafka-producer-perf-test внутри брокера
+  local size=${1:-1024} records=${2:-1000000}
+  docker exec -it "$(broker_container)" /opt/kafka/bin/kafka-producer-perf-test.sh \
+    --topic labs.orders.created.v1 \
+    --num-records "$records" \
+    --record-size "$size" \
+    --throughput -1 \
+    --producer-props "bootstrap.servers=$(internal_bootstrap)" \
+      "acks=${ACKS:-all}" \
+      "compression.type=${COMPRESSION:-none}" \
+      "linger.ms=${LINGER_MS:-5}" \
+      "batch.size=${BATCH_SIZE:-16384}"
+}
+
+# ============================ CLI-шорткаты ============================
+
+cmd_shell() { #help shell|bash внутри брокера
+  docker exec -it "$(broker_container)" bash
+}
+
+cmd_tail() { #help tail <topic>|читать топик с начала в консоль
+  local topic=${1:?укажите топик}
+  docker exec -it "$(broker_container)" /opt/kafka/bin/kafka-console-consumer.sh \
+    --bootstrap-server "$(internal_bootstrap)" \
+    --topic "$topic" --from-beginning \
+    --property print.key=true --property print.partition=true --property print.timestamp=true
+}
+
+cmd_dump() { #help dump <topic> [partition]|разобрать сегменты лога (модуль 2)
+  local topic=${1:?укажите топик} partition=${2:-0}
+  docker exec -it "$(broker_container)" bash -c \
+    "/opt/kafka/bin/kafka-dump-log.sh --files \$(ls /var/lib/kafka/data/${topic}-${partition}/*.log | head -1) --print-data-log | head -60"
+}
+
+cmd_check() { #help check|проверить, что установлены нужные инструменты
+  local failed=0
+  for cmd in docker mvn java curl; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+      ok "$cmd: $(command -v "$cmd")"
+    else
+      warn "$cmd не найден"; failed=1
+    fi
+  done
+  docker compose version >/dev/null 2>&1 && ok "docker compose v2" || { warn "docker compose v2 не найден"; failed=1; }
+  if command -v java >/dev/null 2>&1; then
+    local ver; ver=$(java -version 2>&1 | head -1)
+    echo "     $ver"
+    java -version 2>&1 | grep -qE '"(2[1-9]|[3-9][0-9])' || warn "нужен JDK 21 или новее"
+  fi
+  ((failed == 0)) && ok "окружение готово" || die "устраните пропуски выше"
+}
+
+# ============================ справка ============================
+
+cmd_help() { #help help|этот список
+  printf '%skl%s — учебное окружение Apache Kafka\n\n' "$C_BOLD" "$C_RESET"
+  printf 'Использование: ./kl <команда> [аргументы]\n\n'
+
+  # Маркер собирается из переменной, иначе grep нашёл бы сам себя.
+  local marker="#${C_HELP_TAG}"
+  # Левая колонка держится ASCII, чтобы выравнивание не зависело от локали.
+  local usage desc
+  while IFS='|' read -r usage desc; do
+    printf '  %s%-34s%s %s\n' "$C_BLUE" "$usage" "$C_RESET" "$desc"
+  done < <(grep -o "${marker} .*" "$0" | cut -c$(( ${#marker} + 2 ))-)
+
+  cat <<'TXT'
+
+Примеры:
+  ./kl up single && ./kl topics create
+  ACKS=1 COMPRESSION=zstd ./kl produce async 500000
+  GROUP_PROTOCOL=classic ./kl consume
+  ./kl chaos kill-broker 2
+  ./kl tail labs.orders.created.v1
+
+Переменные окружения читаются из .env (скопируйте из .env.example).
+TXT
+}
+
+# ============================ диспетчер ============================
+
+main() {
+  local cmd=${1:-help}
+  shift || true
+
+  if declare -f "cmd_$cmd" >/dev/null; then
+    "cmd_$cmd" "$@"
+  else
+    warn "неизвестная команда: $cmd"
+    echo
+    cmd_help
+    exit 1
+  fi
+}
+
+main "$@"

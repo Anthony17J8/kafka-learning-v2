@@ -1,0 +1,32 @@
+# Модуль 10: минимальный набор алертов. Пороги обоснуйте в notes/10-monitoring.md.
+groups:
+  - name: kafka-core
+    rules:
+      - alert: KafkaUnderReplicatedPartitions
+        expr: sum(kafka_server_replicamanager_underreplicatedpartitions) > 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Есть under-replicated партиции"
+          description: "Реплики отстают или брокер недоступен. Проверьте ISR и состояние брокеров."
+
+      - alert: KafkaOfflinePartitions
+        expr: sum(kafka_controller_kafkacontroller_offlinepartitionscount) > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Партиции без лидера — запись и чтение недоступны"
+
+      - alert: KafkaNoActiveController
+        expr: sum(kafka_controller_kafkacontroller_activecontrollercount) != 1
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Активных контроллеров не ровно один"
+
+      - alert: KafkaRequestHandlerStarved
+        expr: avg(kafka_server_kafkarequesthandlerpool_requesthandleravgidlepercent) < 0.3
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Пул обработчиков запросов перегружен (idle < 30%)"

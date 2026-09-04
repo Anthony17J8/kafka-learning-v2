@@ -1,0 +1,43 @@
+# Конфиг Prometheus JMX Exporter для брокера Kafka.
+# Требуется файл jmx_prometheus_javaagent.jar в этом же каталоге (см. ./kl jmx-agent).
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+
+rules:
+  # kafka.server / kafka.controller / kafka.network с атрибутом topic+partition
+  - pattern: kafka.(\w+)<type=(.+), name=(.+), topic=(.+), partition=(.+)><>Value
+    name: kafka_$1_$2_$3
+    type: GAUGE
+    labels:
+      topic: "$4"
+      partition: "$5"
+
+  - pattern: kafka.(\w+)<type=(.+), name=(.+), topic=(.+)><>Value
+    name: kafka_$1_$2_$3
+    type: GAUGE
+    labels:
+      topic: "$4"
+
+  # Метрики-счётчики с Count/OneMinuteRate
+  - pattern: kafka.(\w+)<type=(.+), name=(.+)><>(Count|OneMinuteRate|Value)
+    name: kafka_$1_$2_$3_$4
+    type: GAUGE
+
+  - pattern: kafka.(\w+)<type=(.+), name=(.+), (\w+)=(.+)><>(Count|OneMinuteRate|Value)
+    name: kafka_$1_$2_$3_$6
+    type: GAUGE
+    labels:
+      "$4": "$5"
+
+  # Перцентили времени обработки запросов
+  - pattern: kafka.network<type=RequestMetrics, name=TotalTimeMs, request=(.+)><>(\d+)thPercentile
+    name: kafka_network_requestmetrics_totaltimems
+    type: GAUGE
+    labels:
+      request: "$1"
+      quantile: "0.$2"
+
+  # JVM
+  - pattern: java.lang<type=Memory><HeapMemoryUsage>used
+    name: jvm_memory_heap_used_bytes
+    type: GAUGE
