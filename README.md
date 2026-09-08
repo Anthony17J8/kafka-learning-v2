@@ -1,48 +1,64 @@
 # kafka-learning
 
-Учебный монорепозиторий по Apache Kafka 4.x. Окружения, лабораторные работы и заготовки под финальные проекты по роадмапу.
+Учебный репозиторий по Apache Kafka 4.x: окружения, лабораторные работы, теория и практикумы по роадмапу.
+
+**Принцип работы: всё вручную.** Никаких `make`, никаких обёрток. Вы пишете `docker compose`, `docker exec`, `mvn` и утилиты Kafka напрямую. Это медленнее, но именно так формируется навык, который переносится на любой проект.
+
+Готовые обёртки в репозитории есть, но лежат отдельно и как учебный материал — см. [раздел ниже](#обёртки-справочный-материал).
 
 ## Быстрый старт
 
 ```bash
+# 1. Окружение
+cd docker
 cp .env.example .env
-./kl check                 # проверить, что стоят docker, jdk 21, maven
+docker compose -f compose.single.yml up -d
+docker compose -f compose.single.yml ps
 
-# Модули 0-5: одиночный брокер
-./kl up single
-./kl topics create
+# 2. Топики
+docker exec -i kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9094 \
+  --create --topic labs.orders.created.v1 --partitions 6 --replication-factor 1
 
-# Проверка: отправить и прочитать
-./kl produce async 10000
-./kl tail labs.orders.created.v1
+# 3. Проверка
+docker exec -it kafka /opt/kafka/bin/kafka-console-producer.sh \
+  --bootstrap-server localhost:9094 --topic labs.orders.created.v1
 ```
 
-UI кластера: http://localhost:8080
+Все команды с пояснениями: **[docs/commands.md](docs/commands.md)**. Держите открытым в соседней вкладке.
 
-Для модулей 6 и дальше нужен полноценный кластер:
+## Требования
+
+Docker 24+, docker compose v2, JDK 21, Maven 3.9+, минимум 8 ГБ памяти, выделенной Docker.
 
 ```bash
-./kl down
-./kl up cluster            # 3 брокера, RF=3, Schema Registry
-./kl topics create         # RF определится автоматически
-./kl health
+docker --version && docker compose version && java -version && mvn -v
+docker info | grep -i "total memory"
 ```
-
-Все команды: `./kl help`. Скрипт сам определяет, какое окружение поднято,
-и подставляет нужный bootstrap — руками экспортировать `BOOTSTRAP_SERVERS`
-не нужно, но можно, если хотите переопределить.
 
 ## Что где лежит
 
 | Каталог | Содержимое |
 |---|---|
-| `docker/` | три окружения: одиночный брокер, кластер 3×брокер + Schema Registry, мониторинг |
+| `docker/` | окружения: одиночный брокер, кластер, JMX-override, мониторинг |
+| `docs/commands.md` | справочник прямых команд |
+| `docs/modules/` | теория и практикум по каждому модулю |
 | `labs/` | Maven-мультимодуль с кодом лабораторных |
-| `kl` | единая точка входа: окружения, топики, лабы, учения |
-| `scripts/` | создание топиков, проверка здоровья, сценарии отказов, общая bash-библиотека |
-| `notes/` | конспекты по модулям — заполняете вы |
-| `projects/` | финальные проекты |
+| `notes/` | ваши конспекты и результаты экспериментов |
 | `benchmarks/` | результаты нагрузочных тестов и выводы |
+| `projects/` | финальные проекты |
+| `kl`, `scripts/` | обёртки, оставлены как справочный материал |
+
+## Окружения
+
+| Файл | Назначение | Bootstrap с хоста |
+|---|---|---|
+| `compose.single.yml` | один брокер, модули 0–5 | `localhost:9092` |
+| `compose.cluster.yml` | 3 ноды + Schema Registry, модули 6+ | `localhost:19092,localhost:29092,localhost:39092` |
+| `compose.jmx.yml` | override, добавляет JMX-агент, модуль 10 | — |
+| `compose.monitoring.yml` | Prometheus + Grafana, модуль 10 | — |
+
+Внутри compose-сети брокеры доступны как `kafka-1:9094`, `kafka-2:9094`, `kafka-3:9094` (одиночный — `kafka:9094`). Внутренний порт одинаков у всех нод, внешние разные.
 
 ## Модули лаб
 
@@ -54,90 +70,36 @@ UI кластера: http://localhost:8080
 | 7. Администрирование | `labs/lab07-admin` | диагностика кластера через Admin API |
 | 12. Streams | `labs/lab12-streams` | оконная агрегация + тесты на TopologyTestDriver |
 
-Модули 2, 5, 8-11, 13-15 из роадмапа выполняются поверх этой же инфраструктуры: CLI-упражнения, Schema Registry, Connect, безопасность. Каталоги под них добавляйте по мере прохождения, соблюдая ту же структуру.
+Модули 2, 5, 8–11, 13–15 выполняются поверх той же инфраструктуры. Каталоги под них добавляйте по мере прохождения, соблюдая ту же структуру.
 
 ## Порядок работы над модулем
 
-1. Прочитать раздел документации из роадмапа.
-2. Выполнить задания, дописывая код в соответствующий `labs/labNN-*`.
+1. Прочитать раздел официальной документации из роадмапа и теорию в `docs/modules/module-NN-theory.md`.
+2. Пройти практикум `docs/modules/module-NN-practice.md`, дописывая код в `labs/labNN-*`.
 3. Записать выводы в `notes/NN-*.md` по шаблону `notes/TEMPLATE.md`.
-4. Ответить на контрольные вопросы модуля письменно. Если ответ не пишется — модуль не закрыт.
+4. Ответить на контрольные вопросы письменно. Если ответ не пишется — модуль не закрыт.
 
-## Учения по отказам
+## Одна ловушка, о которой стоит знать сразу
 
-```bash
-./kl chaos kill-broker 2      # убить брокер под нагрузкой
-./kl chaos isolate 3          # сетевая изоляция
-./kl chaos rolling-restart    # перезапуск всего кластера
-./kl chaos fill-disk 1        # заполнить диск балластом
-```
+Если в контейнере брокера задан `KAFKA_OPTS` с javaagent (это происходит при подключении `compose.jmx.yml`), то **любая** CLI-утилита, запущенная через `docker exec`, унаследует эту переменную, попытается занять уже занятый порт агента и умрёт с `BindException: Address in use`.
 
-Список сценариев: `./kl chaos`.
-
-Цель rolling restart: ноль ошибок на стороне клиента. Если ошибки есть, разберитесь почему, прежде чем идти дальше.
-
-## Переменные окружения для лаб
-
-| Переменная | Назначение |
-|---|---|
-| `BOOTSTRAP_SERVERS` | адреса брокеров |
-| `ACKS`, `LINGER_MS`, `BATCH_SIZE`, `COMPRESSION` | параметры producer для экспериментов модуля 3 |
-| `GROUP_PROTOCOL` | `consumer` (KIP-848) или `classic` — сравнение в модуле 4 |
-| `MAX_POLL_RECORDS`, `MAX_POLL_INTERVAL_MS`, `PROCESSING_MS` | воспроизведение rebalance storm |
-| `PROCESSING_GUARANTEE`, `NUM_STANDBY` | режимы Kafka Streams |
-
-Пример:
+Лечится гашением переменной для конкретного вызова:
 
 ```bash
-ACKS=1 COMPRESSION=zstd LINGER_MS=50 ./kl produce async 500000
+docker exec -it -e KAFKA_OPTS= kafka-1 /opt/kafka/bin/kafka-topics.sh ...
 ```
 
-## Проверка окружения
+Ровно по этой причине в healthcheck обоих compose-файлов стоит `KAFKA_OPTS=` перед командой.
 
-Нужны: Docker 24+, docker compose v2, JDK 21, Maven 3.9+, около 6 ГБ свободной RAM для кластера.
+## Обёртки: справочный материал
 
-```bash
-./kl check
-```
+В корне лежит `kl` — bash-CLI с подкомандами, и `scripts/` с общей библиотекой. **Они не являются рабочим интерфейсом репозитория** и могут отставать от compose-файлов.
 
-## Справочник команд
+Оставлены намеренно, как пример того, как такие вещи устроены:
 
-```
-Окружение
-  ./kl check                       проверить инструменты
-  ./kl up single|cluster|monitoring
-  ./kl down [--keep-data]
-  ./kl restart cluster
-  ./kl ps                          что запущено
-  ./kl logs [сервис]
+- диспетчер подкоманд через `declare -f` и динамический вызов;
+- генерация справки из комментариев в собственном исходнике;
+- определение активного окружения и подстановка нужного bootstrap;
+- работа с массивами, process substitution, обработка кодов возврата.
 
-Топики
-  ./kl topics create               создать учебные топики
-  ./kl topics list
-  ./kl topics describe labs.orders.created.v1
-  ./kl topics purge                удалить все labs.*
-
-Диагностика
-  ./kl health                      состояние кластера
-  ./kl doctor                      то же через Admin API
-  ./kl groups [группа]             consumer-группы и lag
-  ./kl lag [группа]                lag через Admin API
-  ./kl dump <топик> [партиция]     разбор сегментов лога
-
-Лабы
-  ./kl build                       сборка labs/
-  ./kl test                        тесты
-  ./kl produce [режим] [кол-во]
-  ./kl consume
-  ./kl tx [transactional.id]
-  ./kl streams
-  ./kl bench [размер] [кол-во]
-
-Прочее
-  ./kl shell                       bash внутри брокера
-  ./kl tail <топик>
-  ./kl chaos <сценарий>
-```
-
-Скрипты `scripts/*.sh` работают и напрямую, без `kl`: общие функции вынесены в
-`scripts/lib/common.sh`, который каждый из них подключает сам.
+Разбор кода построчно — в истории проекта. Когда прямые команды войдут в привычку, полезное упражнение: переписать `kl` под текущие compose-файлы самостоятельно.

@@ -82,7 +82,7 @@ broker_container() {
 
 internal_bootstrap() {
   case "$(active_env)" in
-    cluster) echo "${INTERNAL_BOOTSTRAP:-localhost:29092}" ;;
+    cluster) echo "${INTERNAL_BOOTSTRAP:-localhost:9094}" ;;
     single)  echo "${INTERNAL_BOOTSTRAP:-localhost:19092}" ;;
     *)       die "ни одно окружение не запущено" ;;
   esac
@@ -103,7 +103,7 @@ host_bootstrap() {
 # Обёртка над kafka-*.sh внутри контейнера брокера.
 kafka_cli() {
   local tool=$1; shift
-  docker exec -i "$(broker_container)" "/opt/kafka/bin/$tool" \
+  docker exec -i -e KAFKA_OPTS= "$(broker_container)" "/opt/kafka/bin/$tool" \
     --bootstrap-server "$(internal_bootstrap)" "$@"
 }
 

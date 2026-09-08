@@ -1,6 +1,16 @@
-# Кластер 3 брокера (combined-роли) + Schema Registry + UI.
-# Нужен для модулей 6-8, 11-13: репликация, ISR, транзакции, отказы.
-# Запуск: ./kl up cluster
+# Кластер из 3 нод в KRaft (combined-роли: broker + controller).
+# Нужен для модулей 6-8, 11-15.
+#
+#   cd docker
+#   docker compose -f compose.cluster.yml up -d
+#
+# Порты:
+#   localhost:19092 / 29092 / 39092  — клиенты с хоста (listener EXTERNAL)
+#   kafka-N:9094                     — межброкерный трафик (listener INTERNAL)
+#   kafka-N:9093                     — Raft-кворум (listener CONTROLLER)
+#
+# Внутренний порт одинаков у всех нод, внешние разные — так конфигурация
+# симметрична и healthcheck один для всех.
 name: kafka-learning-cluster
 
 x-kafka-common: &kafka-common
@@ -19,19 +29,20 @@ x-kafka-common: &kafka-common
     KAFKA_DEFAULT_REPLICATION_FACTOR: 3
     KAFKA_MIN_INSYNC_REPLICAS: 2
     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
-    # Для модуля 6: попробуйте переключить в "true" и воспроизвести потерю данных.
-    KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
     KAFKA_NUM_PARTITIONS: 3
+    # Модуль 6: переключите в "true" и воспроизведите потерю данных.
+    KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
     CLUSTER_ID: ${CLUSTER_ID:-5L6g3nShT-eMCtK--X86sw}
-    # JMX для модуля 10 (Prometheus JMX exporter подключается как javaagent)
-    KAFKA_OPTS: "-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=9404:/opt/jmx/kafka-broker.yml"
-  volumes:
-    - ./jmx:/opt/jmx:ro
   healthcheck:
-    test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092 >/dev/null 2>&1"]
-    interval: 10s
-    timeout: 10s
-    retries: 18
+    # KAFKA_OPTS= гасим намеренно. kafka-run-class.sh передаёт эту переменную
+    # ЛЮБОМУ java-процессу в контейнере, включая эту утилиту. Если в ней
+    # прописан javaagent, утилита попытается занять уже занятый порт и умрёт,
+    # а healthcheck будет вечно красным при полностью живом брокере.
+    test: ["CMD-SHELL", "KAFKA_OPTS= /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9094 >/dev/null 2>&1"]
+    interval: 15s
+    timeout: 30s
+    start_period: 90s
+    retries: 10
 
 services:
   kafka-1:
@@ -41,12 +52,11 @@ services:
     environment:
       <<: *kafka-env
       KAFKA_NODE_ID: 1
-      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:19092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-1:29092,EXTERNAL://localhost:19092
+      KAFKA_LISTENERS: INTERNAL://:9094,EXTERNAL://:19092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-1:9094,EXTERNAL://localhost:19092
       KAFKA_BROKER_RACK: rack-a
     volumes:
       - kafka-1-data:/var/lib/kafka/data
-      - ./jmx:/opt/jmx:ro
 
   kafka-2:
     <<: *kafka-common
@@ -55,12 +65,11 @@ services:
     environment:
       <<: *kafka-env
       KAFKA_NODE_ID: 2
-      KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:29092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-2:19092,EXTERNAL://localhost:29092
+      KAFKA_LISTENERS: INTERNAL://:9094,EXTERNAL://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-2:9094,EXTERNAL://localhost:29092
       KAFKA_BROKER_RACK: rack-b
     volumes:
       - kafka-2-data:/var/lib/kafka/data
-      - ./jmx:/opt/jmx:ro
 
   kafka-3:
     <<: *kafka-common
@@ -69,16 +78,15 @@ services:
     environment:
       <<: *kafka-env
       KAFKA_NODE_ID: 3
-      KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:39092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-3:19092,EXTERNAL://localhost:39092
+      KAFKA_LISTENERS: INTERNAL://:9094,EXTERNAL://:39092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-3:9094,EXTERNAL://localhost:39092
       KAFKA_BROKER_RACK: rack-c
     volumes:
       - kafka-3-data:/var/lib/kafka/data
-      - ./jmx:/opt/jmx:ro
 
   schema-registry:
-    # Тег вынесен в .env: сверьтесь с актуальной версией Confluent Platform,
-    # совместимой с вашей версией Kafka, перед тем как пинить.
+    # Сверьтесь с версией Confluent Platform, совместимой с вашей Kafka,
+    # прежде чем пинить конкретный тег.
     image: confluentinc/cp-schema-registry:${SCHEMA_REGISTRY_VERSION:-latest}
     container_name: schema-registry
     ports: ["8081:8081"]
@@ -89,7 +97,7 @@ services:
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka-1:29092,PLAINTEXT://kafka-2:19092,PLAINTEXT://kafka-3:19092
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka-1:9094,PLAINTEXT://kafka-2:9094,PLAINTEXT://kafka-3:9094
       SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 3
       SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: backward
 
@@ -101,7 +109,7 @@ services:
       kafka-1: { condition: service_healthy }
     environment:
       KAFKA_CLUSTERS_0_NAME: local-cluster
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:29092,kafka-2:19092,kafka-3:19092
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:9094,kafka-2:9094,kafka-3:9094
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
       DYNAMIC_CONFIG_ENABLED: "true"
 

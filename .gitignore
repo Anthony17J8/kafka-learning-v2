@@ -3,7 +3,7 @@ target/
 *.jar
 !**/gradle/wrapper/*.jar
 docker/jmx/jmx_prometheus_javaagent.jar
-.env
+docker/.env
 *.log
 logs/
 .idea/

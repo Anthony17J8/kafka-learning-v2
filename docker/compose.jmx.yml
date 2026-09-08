@@ -1,0 +1,25 @@
+# Override, добавляющий Prometheus JMX exporter к брокерам. Модуль 10.
+# Отдельным файлом намеренно: до модуля 10 агент не нужен, а его отсутствие
+# или битый jar ломают старт кластера.
+#
+#   cd docker
+#   ./fetch-jmx-agent.sh
+#   docker compose -f compose.cluster.yml -f compose.jmx.yml up -d
+#
+# Порт агента 9404 внутри контейнера, снаружи 19404 / 29404 / 39404.
+name: kafka-learning-cluster
+
+x-jmx: &jmx
+  KAFKA_OPTS: "-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=9404:/opt/jmx/kafka-broker.yml"
+
+services:
+  # environment и volumes сливаются с базовым файлом, а не заменяют его.
+  kafka-1:
+    environment: *jmx
+    volumes: ["./jmx:/opt/jmx:ro"]
+  kafka-2:
+    environment: *jmx
+    volumes: ["./jmx:/opt/jmx:ro"]
+  kafka-3:
+    environment: *jmx
+    volumes: ["./jmx:/opt/jmx:ro"]

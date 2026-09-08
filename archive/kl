@@ -17,7 +17,7 @@ source "$SCRIPT_DIR/scripts/lib/common.sh"
 load_env
 
 C_HELP_TAG="help"   # см. cmd_help
-JMX_AGENT_VERSION="${JMX_AGENT_VERSION:-1.1.0}"
+JMX_AGENT_VERSION="${JMX_AGENT_VERSION:-1.0.1}"
 JMX_AGENT_PATH="$KL_ROOT/docker/jmx/jmx_prometheus_javaagent.jar"
 
 # ============================ окружения ============================
@@ -108,7 +108,7 @@ cmd_topics() { #help topics <create,list,describe,purge>|операции с у�
   case "$action" in
     create)
       if [[ "$(active_env)" == "cluster" ]]; then
-        KAFKA_CONTAINER=kafka-1 INTERNAL_BOOTSTRAP=localhost:29092 REPLICATION_FACTOR=3 \
+        KAFKA_CONTAINER=kafka-1 INTERNAL_BOOTSTRAP=localhost:9094 REPLICATION_FACTOR=3 \
           "$KL_ROOT/scripts/topics-create.sh"
       else
         KAFKA_CONTAINER=kafka INTERNAL_BOOTSTRAP=localhost:19092 REPLICATION_FACTOR=1 \
@@ -191,7 +191,7 @@ cmd_streams() { #help streams|запустить Kafka Streams приложен�
 
 cmd_bench() { #help bench [size] [count]|kafka-producer-perf-test внутри брокера
   local size=${1:-1024} records=${2:-1000000}
-  docker exec -it "$(broker_container)" /opt/kafka/bin/kafka-producer-perf-test.sh \
+  docker exec -it -e KAFKA_OPTS= "$(broker_container)" /opt/kafka/bin/kafka-producer-perf-test.sh \
     --topic labs.orders.created.v1 \
     --num-records "$records" \
     --record-size "$size" \
@@ -206,12 +206,12 @@ cmd_bench() { #help bench [size] [count]|kafka-producer-perf-test внутри �
 # ============================ CLI-шорткаты ============================
 
 cmd_shell() { #help shell|bash внутри брокера
-  docker exec -it "$(broker_container)" bash
+  docker exec -it -e KAFKA_OPTS= "$(broker_container)" bash
 }
 
 cmd_tail() { #help tail <topic>|читать топик с начала в консоль
   local topic=${1:?укажите топик}
-  docker exec -it "$(broker_container)" /opt/kafka/bin/kafka-console-consumer.sh \
+  docker exec -it -e KAFKA_OPTS= "$(broker_container)" /opt/kafka/bin/kafka-console-consumer.sh \
     --bootstrap-server "$(internal_bootstrap)" \
     --topic "$topic" --from-beginning \
     --property print.key=true --property print.partition=true --property print.timestamp=true
@@ -219,7 +219,7 @@ cmd_tail() { #help tail <topic>|читать топик с начала в ко�
 
 cmd_dump() { #help dump <topic> [partition]|разобрать сегменты лога (модуль 2)
   local topic=${1:?укажите топик} partition=${2:-0}
-  docker exec -it "$(broker_container)" bash -c \
+  docker exec -it -e KAFKA_OPTS= "$(broker_container)" bash -c \
     "/opt/kafka/bin/kafka-dump-log.sh --files \$(ls /var/lib/kafka/data/${topic}-${partition}/*.log | head -1) --print-data-log | head -60"
 }
 

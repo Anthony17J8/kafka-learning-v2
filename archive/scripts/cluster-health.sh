@@ -12,7 +12,7 @@ load_env
 section() { printf '\n%s=== %s ===%s\n' "$C_BOLD" "$1" "$C_RESET"; }
 
 section "Кворум контроллеров"
-docker exec -i "$(broker_container)" /opt/kafka/bin/kafka-metadata-quorum.sh \
+docker exec -i -e KAFKA_OPTS= "$(broker_container)" /opt/kafka/bin/kafka-metadata-quorum.sh \
   --bootstrap-server "$(internal_bootstrap)" describe --status || \
   warn "не удалось получить статус кворума"
 
