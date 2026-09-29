@@ -50,7 +50,7 @@ public class ProducerModes {
         long start = System.nanoTime();
 
         try (Producer<String, OrderEvent> producer = new KafkaProducer<>(
-                props, new StringSerializer(), JsonSerde.<OrderEvent>serializer())) {
+                props, new StringSerializer(), JsonSerde.serializer())) {
 
             for (int i = 0; i < count; i++) {
                 OrderEvent event = OrderEvent.sample(

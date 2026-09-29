@@ -1,0 +1,18 @@
+<configuration>
+  <!-- Без этого файла logback пишет всё на уровне DEBUG, и вывод лаб тонет в логах клиента. -->
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{30} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Клиент Kafka: только предупреждения — ретраи, недоступность брокера, истечение батчей. -->
+  <logger name="org.apache.kafka" level="WARN"/>
+  <!-- Кроме конфигурации продюсера: здесь видно действующие значения
+       и сообщение об автоматическом отключении идемпотентности. -->
+  <logger name="org.apache.kafka.clients.producer.ProducerConfig" level="INFO"/>
+
+  <root level="INFO">
+    <appender-ref ref="STDOUT"/>
+  </root>
+</configuration>

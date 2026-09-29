@@ -30,6 +30,7 @@ x-kafka-common: &kafka-common
     KAFKA_MIN_INSYNC_REPLICAS: 2
     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     KAFKA_NUM_PARTITIONS: 3
+    KAFKA_LOG_DIRS: /var/lib/kafka/data
     # Модуль 6: переключите в "true" и воспроизведите потерю данных.
     KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
     CLUSTER_ID: ${CLUSTER_ID:-5L6g3nShT-eMCtK--X86sw}
