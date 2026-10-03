@@ -11,6 +11,8 @@
   <!-- Кроме конфигурации продюсера: здесь видно действующие значения
        и сообщение об автоматическом отключении идемпотентности. -->
   <logger name="org.apache.kafka.clients.producer.ProducerConfig" level="INFO"/>
+  <!-- То же для потребителя: действующие настройки при старте, в том числе group.protocol. -->
+  <logger name="org.apache.kafka.clients.consumer.ConsumerConfig" level="INFO"/>
 
   <root level="INFO">
     <appender-ref ref="STDOUT"/>
