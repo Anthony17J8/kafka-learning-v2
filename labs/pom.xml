@@ -17,10 +17,11 @@
     <module>lab06-transactions</module>
     <module>lab07-admin</module>
     <module>lab12-streams</module>
+    <module>own-clients</module>
   </modules>
 
   <properties>
-    <maven.compiler.release>21</maven.compiler.release>
+    <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
     <kafka.version>4.3.1</kafka.version>

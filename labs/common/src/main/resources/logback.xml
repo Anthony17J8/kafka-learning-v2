@@ -13,6 +13,7 @@
   <logger name="org.apache.kafka.clients.producer.ProducerConfig" level="INFO"/>
   <!-- То же для потребителя: действующие настройки при старте, в том числе group.protocol. -->
   <logger name="org.apache.kafka.clients.consumer.ConsumerConfig" level="INFO"/>
+  <logger name="org.apache.kafka.common.config.AbstractConfig" level="INFO"/>
 
   <root level="INFO">
     <appender-ref ref="STDOUT"/>
