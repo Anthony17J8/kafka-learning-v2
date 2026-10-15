@@ -8,7 +8,7 @@ public class IntakeApp {
     public static void main(String[] args) throws InterruptedException, IOException {
 
         Thread main = Thread.currentThread();
-        PropertiesHolder pi = PropertiesHolder.create(args);
+        IntakeConfig pi = IntakeConfig.create(args);
         DeliveryJournal journal = new DeliveryJournal(pi.getJournalFolder());
         journal.open();
         OrderPublisher publisher = new OrderPublisher(pi.getProducerProps(),

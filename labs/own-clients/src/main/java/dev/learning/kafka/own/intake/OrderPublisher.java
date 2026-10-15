@@ -11,9 +11,10 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Map;
 
+import static dev.learning.kafka.own.common.Constants.ORDERS_TOPIC;
+
 public class OrderPublisher {
     private static final Logger log = LoggerFactory.getLogger(OrderPublisher.class);
-    private static final String ORDERS_TOPIC = "orders.created.v1";
 
     private final KafkaProducer<String, OrderEvent> kafkaProducer;
     private final Duration waitForFinishMs;

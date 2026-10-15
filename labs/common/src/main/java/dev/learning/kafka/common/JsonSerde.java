@@ -3,10 +3,11 @@ package dev.learning.kafka.common;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import java.util.Map;
 import org.apache.kafka.common.errors.SerializationException;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serializer;
+
+import java.util.Map;
 
 /**
  * Простейший JSON serde без реестра схем.
@@ -18,7 +19,7 @@ import org.apache.kafka.common.serialization.Serializer;
  */
 public final class JsonSerde {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper()
+    public static final ObjectMapper MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 

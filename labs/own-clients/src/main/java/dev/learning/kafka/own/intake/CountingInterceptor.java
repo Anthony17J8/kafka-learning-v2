@@ -24,8 +24,8 @@ public class CountingInterceptor implements ProducerInterceptor<String, OrderEve
 
     @Override
     public void configure(Map<String, ?> props) {
-        if (props.containsKey(PropertiesHolder.COUNTING_PERIOD_MS)) {
-            String sVal = props.get(PropertiesHolder.COUNTING_PERIOD_MS).toString();
+        if (props.containsKey(IntakeConfig.COUNTING_PERIOD_MS)) {
+            String sVal = props.get(IntakeConfig.COUNTING_PERIOD_MS).toString();
             try {
                 this.periodMs = Long.parseLong(sVal);
                 if (periodMs <= 0) {
@@ -33,7 +33,7 @@ public class CountingInterceptor implements ProducerInterceptor<String, OrderEve
                 }
             } catch (NumberFormatException exc) {
                 throw new IllegalArgumentException(
-                        "Incorrect value for key: " + PropertiesHolder.COUNTING_PERIOD_MS + "=" + sVal);
+                        "Incorrect value for key: " + IntakeConfig.COUNTING_PERIOD_MS + "=" + sVal);
             }
         }
 

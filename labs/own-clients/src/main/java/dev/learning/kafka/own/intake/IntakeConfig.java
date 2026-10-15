@@ -1,15 +1,15 @@
 package dev.learning.kafka.own.intake;
 
 import dev.learning.kafka.common.Env;
+import dev.learning.kafka.own.common.PropertiesHolder;
 import org.apache.kafka.clients.producer.ProducerConfig;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-public class PropertiesHolder {
+public class IntakeConfig extends PropertiesHolder {
     public static final String WAIT_FINISH_MS = "wait.finish.ms";
     public static final String JOURNAL_FOLDER = "journal.folder";
     public static final String COUNTING_PERIOD_MS = "counting.period";
@@ -41,10 +41,20 @@ public class PropertiesHolder {
         producerProps.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, CountingInterceptor.class.getName());
     }
 
-    public static PropertiesHolder create(String[] args) {
-        PropertiesHolder ph = new PropertiesHolder();
+    public static IntakeConfig create(String[] args) {
+        IntakeConfig ph = new IntakeConfig();
         ph.initProps(args);
         return ph;
+    }
+
+    @Override
+    protected Set<String> ownProperties() {
+        return OWN;
+    }
+
+    @Override
+    protected Map<String, Object> getProperties() {
+        return this.producerProps;
     }
 
     public long getWaitForFinishMs() {
@@ -67,72 +77,28 @@ public class PropertiesHolder {
         return Map.copyOf(producerProps);
     }
 
-    private void initProps(String[] args) {
-        if (args == null) {
-            return;
-        }
-        for (String arg : args) {
-            String[] keyVal = arg.split("=", 2);
-            if (keyVal.length != 2) {
-                throw new IllegalArgumentException("Incorrect format for parameters: " + arg);
-            }
-            if (keyVal[0].isEmpty()) {
-                throw new IllegalArgumentException("Key is empty");
-            }
-            if (keyVal[1].isEmpty()) {
-                throw new IllegalArgumentException("Value is empty: " + keyVal[0] + "=");
-            }
-            if (OWN.contains(keyVal[0])) {
-                handleCustoms(keyVal);
-            } else {
-                producerProps.put(keyVal[0], keyVal[1]);
-            }
-        }
-    }
-
-    private void handleCustoms(String[] keyVal) {
+    @Override
+    public void handleCustoms(String[] keyVal) {
         String key = keyVal[0];
         String val = keyVal[1];
 
         if (key.equals(WAIT_FINISH_MS)) {
-            waitForFinishMs = validateNumberAndGet(val, key);
-            validatePositiveNumber(key, waitForFinishMs);
+            waitForFinishMs = validateNumberAndGet(key, val);
+            validateMoreThan0(key, waitForFinishMs);
         }
 
         if (key.equals(JOURNAL_FOLDER)) {
-            Path folderPath = Path.of(val);
-            boolean exists = Files.exists(folderPath);
-            if (!exists) {
-                throw new IllegalArgumentException(JOURNAL_FOLDER + " doesn't exist");
-            }
-            boolean isDir = Files.isDirectory(folderPath);
-            if (!isDir) {
-                throw new IllegalArgumentException(JOURNAL_FOLDER + " is not directory");
-            }
-            journalFolder = val;
+            journalFolder = validateFolder(val);
         }
 
         if (key.equals(EVENTS_RATE)) {
-            eventsRate = validateNumberAndGet(val, key);
-            validatePositiveNumber(key, eventsRate);
+            eventsRate = validateNumberAndGet(key, val);
+            validateMoreThan0(key, eventsRate);
         }
         if (key.equals(DURATION_GEN_MS)) {
-            durationMs = validateNumberAndGet(val, key);
-            validatePositiveNumber(key, durationMs);
+            durationMs = validateNumberAndGet(key, val);
+            validateMoreThan0(key, durationMs);
         }
     }
 
-    private Long validateNumberAndGet(String val, String key) {
-        try {
-            return Long.parseLong(val);
-        } catch (NumberFormatException exc) {
-            throw new IllegalArgumentException("Incorrect value for key " + key + "=" + val);
-        }
-    }
-
-    private void validatePositiveNumber(String key, Long val) {
-        if (val <= 0) {
-            throw new IllegalArgumentException("Value for key must be positive(" + key + "=" + val + ")");
-        }
-    }
 }
