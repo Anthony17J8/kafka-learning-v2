@@ -113,12 +113,14 @@ public class BalanceStore implements AutoCloseable {
             connection.commit();
             return result;
         } catch (Exception exc) {
+            log.error("Ошибка BalanceStore. Выполняем rollback()", exc);
             try {
                 if (connection != null) {
                     connection.rollback();
                 }
             } catch (SQLException rollExc) {
-                log.error("Откат завершился с ошибкой");
+                log.error("Откат завершился с ошибкой", rollExc);
+                throw new BalanceStoreException(rollExc);
             }
             throw new BalanceStoreException(exc);
         }

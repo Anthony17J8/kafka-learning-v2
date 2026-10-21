@@ -193,7 +193,7 @@ class IntakeConfigTest {
 
         assertThatThrownBy(() -> IntakeConfig.create(new String[] {"journal.folder=" + missing}))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("journal.folder");
+                .hasMessageContaining("no-such-dir");
     }
 
     @Test
@@ -203,7 +203,7 @@ class IntakeConfigTest {
 
         assertThatThrownBy(() -> IntakeConfig.create(new String[] {"journal.folder=" + file}))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("journal.folder");
+                .hasMessageContaining("file.txt");
     }
 
     // ---------- настройка интерсептора ----------

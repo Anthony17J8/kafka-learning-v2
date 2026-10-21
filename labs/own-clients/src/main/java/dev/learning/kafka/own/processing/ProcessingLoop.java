@@ -5,8 +5,6 @@ import dev.learning.kafka.own.processing.exceptions.BalanceStoreException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.common.Metric;
-import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.errors.WakeupException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,6 +90,8 @@ public class ProcessingLoop {
         } catch (WakeupException exc) {
             log.info("Цикл poll() консьюмера был прерван. Был вызван wakeup()");
         } finally {
+            log.info("Обработано: {}, дубликатов: {}, битых: {}",
+                     processed.longValue(), duplicated.longValue(), invalid.longValue());
             try {
                 consumer.commitSync(offsetTracker.snapshot());
             } catch (RuntimeException exc) {
@@ -111,11 +111,6 @@ public class ProcessingLoop {
             log.info("Обработано: {}, дубликатов: {}, битых: {}",
                      processed.longValue(), duplicated.longValue(), invalid.longValue());
             log.info("=".repeat(20));
-            Map<MetricName, ? extends Metric> metrics = consumer.metrics();
-            log.info("Метрики консьюмера: ");
-            metrics.forEach((key, val) -> {
-                log.info("{} : {}", key, val);
-            });
             previousPrint = current;
         }
     }
