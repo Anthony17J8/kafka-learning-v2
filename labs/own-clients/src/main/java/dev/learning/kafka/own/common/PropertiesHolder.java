@@ -2,6 +2,8 @@ package dev.learning.kafka.own.common;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.Map;
 import java.util.Set;
 
@@ -12,6 +14,8 @@ public abstract class PropertiesHolder {
     protected abstract Map<String, Object> getProperties();
 
     protected abstract void handleCustoms(String[] keyVal);
+
+    protected void postInit() {}
 
     public void initProps(String[] args) {
         if (args == null) {
@@ -34,6 +38,7 @@ public abstract class PropertiesHolder {
                 getProperties().put(keyVal[0], keyVal[1]);
             }
         }
+        postInit();
     }
 
     protected static Long validateNumberAndGet(String key, String val) {
@@ -87,5 +92,22 @@ public abstract class PropertiesHolder {
             throw new IllegalArgumentException(val + " is not a file");
         }
         return val;
+    }
+
+    protected static String validateNoFileExist(String val) {
+        Path fPath = Path.of(val);
+        if (Files.exists(fPath)) {
+            throw new IllegalArgumentException(fPath + " exists");
+        }
+        return val;
+    }
+
+    protected static Instant validateInstant(String val) {
+        try {
+            return Instant.parse(val);
+        } catch (DateTimeParseException dtpe) {
+            throw new IllegalArgumentException(
+                    val + " doesn't correspond to ISO format, use e.g. 2011-12-03T10:15:30Z");
+        }
     }
 }
