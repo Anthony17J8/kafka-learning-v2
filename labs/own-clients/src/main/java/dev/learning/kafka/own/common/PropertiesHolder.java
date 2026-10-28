@@ -15,7 +15,8 @@ public abstract class PropertiesHolder {
 
     protected abstract void handleCustoms(String[] keyVal);
 
-    protected void postInit() {}
+    protected void postInit() {
+    }
 
     public void initProps(String[] args) {
         if (args == null) {
@@ -108,6 +109,14 @@ public abstract class PropertiesHolder {
         } catch (DateTimeParseException dtpe) {
             throw new IllegalArgumentException(
                     val + " doesn't correspond to ISO format, use e.g. 2011-12-03T10:15:30Z");
+        }
+    }
+
+    protected static int validateIntOverflow(String key, Long val) {
+        try {
+            return Math.toIntExact(val);
+        } catch (ArithmeticException ae) {
+            throw new IllegalArgumentException(key + " overflows int value");
         }
     }
 }
